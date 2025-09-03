@@ -96,7 +96,7 @@ const ChatBasedGameSystem: React.FC<ChatBasedGameSystemProps> = ({ roomId }) => 
     {
       id: '2',
       type: 'system',
-      content: "🎮 **Available Games:**\n• **Mystery Manor** - Solve mysteries in a haunted mansion\n• **Brain Teaser** - Challenge your mind with puzzles\n• **AI Story Battle** - Revolutionary multiplayer story-building game!\n• **Classic Games** - Tic-tac-toe, hangman, number guessing, rock paper scissors\n\nJust ask me to play any game!",
+      content: "🎮 **Available Games:**\n• **Mystery Manor** - Solve mysteries in a haunted mansion\n• **Brain Teaser** - Challenge your mind with puzzles\n• **AI Story Battle** - Revolutionary multiplayer story-building game!\n• **Scribble** - Multiplayer drawing and guessing game (like Pictionary!)\n• **Classic Games** - Tic-tac-toe, hangman, number guessing, rock paper scissors\n\nJust ask me to play any game!",
       timestamp: new Date()
     }
   ]);
