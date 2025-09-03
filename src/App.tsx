@@ -1,9 +1,24 @@
 import React from 'react';
+import { Routes, Route, useParams } from 'react-router-dom';
 import ChatBasedGameSystem from './components/ChatBasedGameSystem';
 
-const App: React.FC = () => {
+const RoomPage: React.FC = () => {
+  const { roomId } = useParams<{ roomId: string }>();
+  
+  return (
+    <div>
+      <ChatBasedGameSystem roomId={roomId} />
+    </div>
+  );
+};
 
-  return <ChatBasedGameSystem />;
+const App: React.FC = () => {
+  return (
+    <Routes>
+      <Route path="/" element={<ChatBasedGameSystem />} />
+      <Route path="/room/:roomId" element={<RoomPage />} />
+    </Routes>
+  );
 };
 
 export default App;

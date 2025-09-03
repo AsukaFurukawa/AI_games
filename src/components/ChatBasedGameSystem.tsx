@@ -4,36 +4,23 @@ import {
   Send, 
   Bot, 
   User, 
-  Gamepad2, 
-  Brain, 
-  Home, 
   Users, 
   Settings,
-  Sparkles,
-  MessageCircle,
-  Zap,
-  Trophy,
-  Puzzle,
-  Target,
-  X,
-  O,
-  RotateCcw,
-  Lightbulb,
-  Timer,
-  Eye
+  Sparkles
 } from 'lucide-react';
 
 // Import AI service
 import groqAIService from '../services/groqAIService';
 import { createManorEngine, GameResponse } from '../services/mysteryManorEngine';
 import bookVectorService from '../services/bookVectorService';
+import ScribbleModal from './ScribbleModal';
 
 interface ChatMessage {
   id: string;
   type: 'user' | 'assistant' | 'system';
   content: string;
   timestamp: Date;
-  gameType?: 'mystery-manor' | 'brain-teaser' | 'tic-tac-toe' | 'hangman' | 'number-guessing' | 'rock-paper-scissors' | 'ai-story-battle';
+  gameType?: 'mystery-manor' | 'brain-teaser' | 'tic-tac-toe' | 'hangman' | 'number-guessing' | 'rock-paper-scissors' | 'ai-story-battle' | 'scribble';
   isGameResponse?: boolean;
   gameData?: any;
   interactiveComponent?: React.ReactNode;
@@ -50,6 +37,7 @@ interface GameState {
   currentTeaser?: any;
   teaserScore?: number;
   teaserStreak?: number;
+  isGeneratingNewTeaser?: boolean;
   // Tic-Tac-Toe state
   ticTacToeBoard?: (string | null)[];
   ticTacToePlayer?: 'X' | 'O';
@@ -93,7 +81,11 @@ interface GameState {
   };
 }
 
-const ChatBasedGameSystem: React.FC = () => {
+interface ChatBasedGameSystemProps {
+  roomId?: string;
+}
+
+const ChatBasedGameSystem: React.FC<ChatBasedGameSystemProps> = ({ roomId }) => {
   const [messages, setMessages] = useState<ChatMessage[]>([
     {
       id: '1',
@@ -114,8 +106,9 @@ const ChatBasedGameSystem: React.FC = () => {
     currentGame: null,
     gameHistory: [],
     isInGame: false,
-    teaserScore: 0,
-    teaserStreak: 0,
+         teaserScore: 0,
+     teaserStreak: 0,
+     isGeneratingNewTeaser: false,
     ticTacToeBoard: Array(9).fill(null),
     ticTacToePlayer: 'X',
     ticTacToeWinner: null,
@@ -141,6 +134,7 @@ const ChatBasedGameSystem: React.FC = () => {
       maxPlayers: 4
     }
   });
+  const [showScribbleModal, setShowScribbleModal] = useState(false);
 
   // Debug game state changes
   useEffect(() => {
@@ -148,6 +142,23 @@ const ChatBasedGameSystem: React.FC = () => {
     currentGameRef.current = gameState.currentGame;
     gameStateRef.current = gameState;
   }, [gameState]);
+
+  // Auto-join room if roomId is provided (auto-open Scribble modal for room links)
+  useEffect(() => {
+    if (roomId) {
+      // Auto-open Scribble modal for room links
+      setShowScribbleModal(true);
+      
+      const joinMessage: ChatMessage = {
+        id: `join-room-${Date.now()}-${Math.random()}`,
+        type: 'assistant',
+        content: `🎮 **Joining Room ${roomId}**\n\nWelcome to the Scribble game! You've joined an existing game room.`,
+        timestamp: new Date(),
+        gameType: 'scribble'
+      };
+      setMessages(prev => [...prev, joinMessage]);
+    }
+  }, [roomId]);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -167,12 +178,12 @@ const ChatBasedGameSystem: React.FC = () => {
   const handleSendMessage = async () => {
     if (!inputValue.trim()) return;
 
-    const userMessage: ChatMessage = {
-      id: Date.now().toString(),
-      type: 'user',
-      content: inputValue.trim(),
-      timestamp: new Date()
-    };
+         const userMessage: ChatMessage = {
+       id: `user-${Date.now()}-${Math.random()}`,
+       type: 'user',
+       content: inputValue.trim(),
+       timestamp: new Date()
+     };
 
     setMessages(prev => [...prev, userMessage]);
     setInputValue('');
@@ -182,31 +193,45 @@ const ChatBasedGameSystem: React.FC = () => {
   };
 
   const processUserMessage = async (message: string) => {
+    console.log('processUserMessage called with:', message);
+    console.log('currentGameRef.current:', currentGameRef.current);
+    
     const lowerMessage = message.toLowerCase();
 
     // Game detection logic
     if (lowerMessage.includes('mystery manor') || lowerMessage.includes('mystery') || lowerMessage.includes('haunted')) {
+      console.log('Starting mystery manor');
       await startGame('mystery-manor', message);
     } else if (lowerMessage.includes('brain teaser') || lowerMessage.includes('puzzle') || lowerMessage.includes('riddle')) {
+      console.log('Starting brain teaser');
       await startGame('brain-teaser', message);
     } else if (lowerMessage.includes('tic tac toe') || lowerMessage.includes('tic-tac-toe') || lowerMessage.includes('tic tac tow')) {
+      console.log('Starting tic tac toe');
       await startGame('tic-tac-toe', message);
     } else if (lowerMessage.includes('hangman')) {
+      console.log('Starting hangman');
       await startGame('hangman', message);
     } else if (lowerMessage.includes('number guessing') || lowerMessage.includes('guess the number')) {
+      console.log('Starting number guessing');
       await startGame('number-guessing', message);
     } else if (lowerMessage.includes('rock paper scissors') || lowerMessage.includes('rock-paper-scissors')) {
+      console.log('Starting rock paper scissors');
       await startGame('rock-paper-scissors', message);
     } else if (lowerMessage.includes('ai story battle') || lowerMessage.includes('story battle') || lowerMessage.includes('collaborative story') || lowerMessage.includes('multiplayer story')) {
+      console.log('Starting ai story battle');
       await startGame('ai-story-battle', message);
     } else if (lowerMessage.includes('play') && lowerMessage.includes('game')) {
+      console.log('Showing game options');
       await showGameOptions();
     } else if (lowerMessage.includes('help') || lowerMessage.includes('what can you do')) {
+      console.log('Showing help');
       await showHelp();
     } else if (currentGameRef.current) {
+      console.log('Handling game action for current game:', currentGameRef.current);
       // Handle in-game actions for any active game
       await handleGameAction(message);
     } else {
+      console.log('No game active, generating chat response');
       await generateChatResponse(message);
     }
   };
@@ -389,6 +414,13 @@ const ChatBasedGameSystem: React.FC = () => {
   // Handle game actions
   const handleGameAction = async (message: string) => {
     if (!currentGameRef.current) return;
+
+    // Check if the current game is over
+    if (isGameOver()) {
+      console.log('Game is over, generating chat response instead');
+      await generateChatResponse(message);
+      return;
+    }
 
     // Check for quit commands first
     const lowerMessage = message.toLowerCase();
@@ -587,63 +619,132 @@ const ChatBasedGameSystem: React.FC = () => {
 
   // Brain Teaser action handler
   const handleBrainTeaserAction = async (message: string) => {
-    if (!gameState.currentTeaser) return;
+    if (!gameState.currentTeaser) {
+      console.log('No current teaser, generating chat response');
+      await generateChatResponse(message);
+      return;
+    }
 
     // Skip processing if user just said "ready" or similar
     const lowerMessage = message.toLowerCase().trim();
     if (lowerMessage === 'ready' || lowerMessage === 'ok' || lowerMessage === 'yes' || lowerMessage === 'start') {
-      const readyMessage: ChatMessage = {
-        id: Date.now().toString(),
-        type: 'assistant',
-        content: "Great! Here's your brain teaser. Type your answer when you're ready!",
-        timestamp: new Date(),
-        gameType: 'brain-teaser',
-        isGameResponse: true,
-        // Don't store interactive component in message - render it separately
-      };
+             const readyMessage: ChatMessage = {
+         id: `ready-${Date.now()}-${Math.random()}`,
+         type: 'assistant',
+         content: "Great! Here's your brain teaser. Type your answer when you're ready!",
+         timestamp: new Date(),
+         gameType: 'brain-teaser',
+         isGameResponse: true,
+         // Don't store interactive component in message - render it separately
+       };
       setMessages(prev => [...prev, readyMessage]);
       return;
     }
 
     const isCorrect = lowerMessage === gameState.currentTeaser.answer.toLowerCase();
     
-    if (isCorrect) {
-      const points = 10;
-      setGameState(prev => ({
-        ...prev,
-        teaserScore: (prev.teaserScore || 0) + points,
-        teaserStreak: (prev.teaserStreak || 0) + 1
-      }));
+         if (isCorrect) {
+       const points = 10;
+       const newScore = (gameState.teaserScore || 0) + points;
+       const newStreak = (gameState.teaserStreak || 0) + 1;
+       
+       setGameState(prev => ({
+         ...prev,
+         teaserScore: newScore,
+         teaserStreak: newStreak
+       }));
 
-      const correctMessage: ChatMessage = {
-        id: Date.now().toString(),
-        type: 'assistant',
-        content: `🎉 **Correct!** +${points} points!\n\nYour score: ${(gameState.teaserScore || 0) + points}\nStreak: ${(gameState.teaserStreak || 0) + 1}\n\nWant another puzzle? Just ask!`,
-        timestamp: new Date(),
-        gameType: 'brain-teaser',
-        isGameResponse: true,
-        // Don't store interactive component in message - render it separately
-      };
+       const correctMessage: ChatMessage = {
+         id: `correct-${Date.now()}-${Math.random()}`,
+         type: 'assistant',
+         content: `🎉 **Correct!** +${points} points!\n\nYour score: ${newScore}\nStreak: ${newStreak}\n\nGenerating a new puzzle for you...`,
+         timestamp: new Date(),
+         gameType: 'brain-teaser',
+         isGameResponse: true,
+         // Don't store interactive component in message - render it separately
+       };
 
-      setMessages(prev => [...prev, correctMessage]);
+       setMessages(prev => [...prev, correctMessage]);
+       
+       // Generate a new teaser after a short delay
+       setTimeout(() => {
+         setGameState(prev => ({
+           ...prev,
+           isGeneratingNewTeaser: true
+         }));
+         
+         const newTeaser = generateBrainTeaser();
+         setGameState(prev => ({
+           ...prev,
+           currentTeaser: newTeaser,
+           isGeneratingNewTeaser: false
+         }));
+         
+         const newTeaserMessage: ChatMessage = {
+           id: `new-teaser-${Date.now()}-${Math.random()}`,
+           type: 'assistant',
+           content: `🧠 **New Brain Teaser!**\n\n${newTeaser.question}\n\nType your answer or use the buttons below!`,
+           timestamp: new Date(),
+           gameType: 'brain-teaser',
+           isGameResponse: true
+         };
+         
+         setMessages(prev => [...prev, newTeaserMessage]);
+       }, 1500);
     } else {
       setGameState(prev => ({
         ...prev,
         teaserStreak: 0
       }));
 
-      const incorrectMessage: ChatMessage = {
-        id: Date.now().toString(),
-        type: 'assistant',
-        content: `❌ **Incorrect!** Try again or ask for a hint.\n\nHint: ${gameState.currentTeaser.hint}`,
-        timestamp: new Date(),
-        gameType: 'brain-teaser',
-        isGameResponse: true,
-        // Don't store interactive component in message - render it separately
-      };
+             const incorrectMessage: ChatMessage = {
+         id: `incorrect-${Date.now()}-${Math.random()}`,
+         type: 'assistant',
+         content: `❌ **Incorrect!** Try again or ask for a hint.\n\nHint: ${gameState.currentTeaser.hint}`,
+         timestamp: new Date(),
+         gameType: 'brain-teaser',
+         isGameResponse: true,
+         // Don't store interactive component in message - render it separately
+       };
 
       setMessages(prev => [...prev, incorrectMessage]);
     }
+  };
+
+  // Handle reveal answer for brain teaser
+  const handleRevealAnswer = () => {
+    if (!gameState.currentTeaser) return;
+    
+    const revealMessage: ChatMessage = {
+      id: `reveal-${Date.now()}-${Math.random()}`,
+      type: 'assistant',
+      content: `🔍 **Answer Revealed!**\n\n**Question:** ${gameState.currentTeaser.question}\n\n**Answer:** ${gameState.currentTeaser.answer}\n\n**Explanation:** ${gameState.currentTeaser.hint || 'No additional explanation available.'}\n\nGenerating a new puzzle for you...`,
+      timestamp: new Date(),
+      gameType: 'brain-teaser',
+      isGameResponse: true
+    };
+    
+    setMessages(prev => [...prev, revealMessage]);
+    
+    // Generate a new teaser after a short delay (don't end the game)
+    setTimeout(() => {
+      const newTeaser = generateBrainTeaser();
+      setGameState(prev => ({
+        ...prev,
+        currentTeaser: newTeaser
+      }));
+      
+      const newTeaserMessage: ChatMessage = {
+        id: `new-teaser-reveal-${Date.now()}-${Math.random()}`,
+        type: 'assistant',
+        content: `🧠 **New Brain Teaser!**\n\n${newTeaser.question}\n\nType your answer or use the buttons below!`,
+        timestamp: new Date(),
+        gameType: 'brain-teaser',
+        isGameResponse: true
+      };
+      
+      setMessages(prev => [...prev, newTeaserMessage]);
+    }, 1500);
   };
 
   // Hangman action handler
@@ -652,29 +753,29 @@ const ChatBasedGameSystem: React.FC = () => {
     
     const letter = message.trim().toUpperCase();
     if (letter.length !== 1 || !/[A-Z]/.test(letter)) {
-      const errorMessage: ChatMessage = {
-        id: Date.now().toString(),
-        type: 'assistant',
-        content: "Please enter a single letter (A-Z).",
-        timestamp: new Date(),
-        gameType: 'hangman',
-        isGameResponse: true,
-        // Don't store interactive component in message - render it separately
-      };
+             const errorMessage: ChatMessage = {
+         id: `hangman-error-${Date.now()}-${Math.random()}`,
+         type: 'assistant',
+         content: "Please enter a single letter (A-Z).",
+         timestamp: new Date(),
+         gameType: 'hangman',
+         isGameResponse: true,
+         // Don't store interactive component in message - render it separately
+       };
       setMessages(prev => [...prev, errorMessage]);
       return;
     }
 
     if (gameState.hangmanGuessed?.includes(letter)) {
-      const repeatMessage: ChatMessage = {
-        id: Date.now().toString(),
-        type: 'assistant',
-        content: `You already guessed "${letter}". Try a different letter!`,
-        timestamp: new Date(),
-        gameType: 'hangman',
-        isGameResponse: true,
-        // Don't store interactive component in message - render it separately
-      };
+             const repeatMessage: ChatMessage = {
+         id: `hangman-repeat-${Date.now()}-${Math.random()}`,
+         type: 'assistant',
+         content: `You already guessed "${letter}". Try a different letter!`,
+         timestamp: new Date(),
+         gameType: 'hangman',
+         isGameResponse: true,
+         // Don't store interactive component in message - render it separately
+       };
       setMessages(prev => [...prev, repeatMessage]);
       return;
     }
@@ -687,15 +788,15 @@ const ChatBasedGameSystem: React.FC = () => {
   const handleNumberGuessingAction = async (message: string) => {
     const guess = parseInt(message);
     if (isNaN(guess) || guess < 1 || guess > 100) {
-      const errorMessage: ChatMessage = {
-        id: Date.now().toString(),
-        type: 'assistant',
-        content: "Please enter a number between 1 and 100.",
-        timestamp: new Date(),
-        gameType: 'number-guessing',
-        isGameResponse: true,
-        // Don't store interactive component in message - render it separately
-      };
+             const errorMessage: ChatMessage = {
+         id: `number-error-${Date.now()}-${Math.random()}`,
+         type: 'assistant',
+         content: "Please enter a number between 1 and 100.",
+         timestamp: new Date(),
+         gameType: 'number-guessing',
+         isGameResponse: true,
+         // Don't store interactive component in message - render it separately
+       };
       setMessages(prev => [...prev, errorMessage]);
       return;
     }
@@ -725,15 +826,15 @@ const ChatBasedGameSystem: React.FC = () => {
       }));
     }
 
-    const guessMessage: ChatMessage = {
-      id: Date.now().toString(),
-      type: 'assistant',
-      content: feedback,
-      timestamp: new Date(),
-      gameType: 'number-guessing',
-      isGameResponse: true,
-      // Don't store interactive component in message - render it separately
-    };
+         const guessMessage: ChatMessage = {
+       id: `number-guess-${Date.now()}-${Math.random()}`,
+       type: 'assistant',
+       content: feedback,
+       timestamp: new Date(),
+       gameType: 'number-guessing',
+       isGameResponse: true,
+       // Don't store interactive component in message - render it separately
+     };
 
     setMessages(prev => [...prev, guessMessage]);
   };
@@ -1016,41 +1117,43 @@ const ChatBasedGameSystem: React.FC = () => {
       result = `I win! ${aiChoice} beats ${choice}!`;
     }
 
-    const gameMessage: ChatMessage = {
-      id: Date.now().toString(),
-      type: 'assistant',
-      content: `You chose ${choice}, I chose ${aiChoice}. ${result}`,
-      timestamp: new Date(),
-      gameType: 'rock-paper-scissors',
-      isGameResponse: true
-    };
+         const gameMessage: ChatMessage = {
+       id: `rps-${Date.now()}-${Math.random()}`,
+       type: 'assistant',
+       content: `You chose ${choice}, I chose ${aiChoice}. ${result}`,
+       timestamp: new Date(),
+       gameType: 'rock-paper-scissors',
+       isGameResponse: true
+     };
 
     setMessages(prev => [...prev, gameMessage]);
   };
 
   const showGameOptions = async () => {
-    const optionsMessage: ChatMessage = {
-      id: Date.now().toString(),
-      type: 'assistant',
-      content: "🎮 **Choose Your Game!**\n\n**Adventure Games:**\n• Mystery Manor - Solve mysteries in a haunted mansion\n• Brain Teaser - Challenge your mind with puzzles\n• **AI Story Battle** - Revolutionary multiplayer story-building game!\n\n**Classic Games:**\n• Tic-Tac-Toe\n• Hangman\n• Number Guessing\n• Rock Paper Scissors\n\nJust tell me which game you'd like to play!",
-      timestamp: new Date()
-    };
+         const optionsMessage: ChatMessage = {
+       id: `options-${Date.now()}-${Math.random()}`,
+       type: 'assistant',
+       content: "🎮 **Choose Your Game!**\n\n**Adventure Games:**\n• Mystery Manor - Solve mysteries in a haunted mansion\n• Brain Teaser - Challenge your mind with puzzles\n• **AI Story Battle** - Revolutionary multiplayer story-building game!\n\n**Classic Games:**\n• Tic-Tac-Toe\n• Hangman\n• Number Guessing\n• Rock Paper Scissors\n\nJust tell me which game you'd like to play!",
+       timestamp: new Date()
+     };
 
     setMessages(prev => [...prev, optionsMessage]);
   };
 
   const showHelp = async () => {
-    const helpMessage: ChatMessage = {
-      id: Date.now().toString(),
-      type: 'assistant',
-      content: "🤖 **I'm your AI Game Assistant!**\n\n**What I can do:**\n• Play games with you\n• Have conversations\n• Help solve puzzles\n• Provide entertainment\n\n**How to play games:**\nJust say \"play [game name]\" or \"I want to play [game name]\"\n\n**Available games:**\n• Mystery Manor\n• Brain Teaser\n• **AI Story Battle** - Revolutionary multiplayer story game!\n• Tic-Tac-Toe\n• Hangman\n• And more!\n\nWhat would you like to do?",
-      timestamp: new Date()
-    };
+         const helpMessage: ChatMessage = {
+       id: `help-${Date.now()}-${Math.random()}`,
+       type: 'assistant',
+       content: "🤖 **I'm your AI Game Assistant!**\n\n**What I can do:**\n• Play games with you\n• Have conversations\n• Help solve puzzles\n• Provide entertainment\n\n**How to play games:**\nJust say \"play [game name]\" or \"I want to play [game name]\"\n\n**Available games:**\n• Mystery Manor\n• Brain Teaser\n• **AI Story Battle** - Revolutionary multiplayer story game!\n• Tic-Tac-Toe\n• Hangman\n• And more!\n\nWhat would you like to do?",
+       timestamp: new Date()
+     };
 
     setMessages(prev => [...prev, helpMessage]);
   };
 
   const generateChatResponse = async (message: string) => {
+    console.log('generateChatResponse called with message:', message);
+    
     // Show typing indicator
     const typingMessage: ChatMessage = {
       id: 'typing',
@@ -1060,6 +1163,51 @@ const ChatBasedGameSystem: React.FC = () => {
     };
     
     setMessages(prev => [...prev, typingMessage]);
+
+    // Check for Scribble game request (more context aware)
+    const lowerMessage = message.toLowerCase();
+    const isGameRequest = (
+      lowerMessage.includes('let\'s play scribble') ||
+      lowerMessage.includes('start scribble') ||
+      lowerMessage.includes('play scribble') ||
+      lowerMessage.includes('join scribble') ||
+      lowerMessage.includes('open scribble') ||
+      lowerMessage.includes('drawing game') ||
+      lowerMessage.includes('pictionary')
+    );
+    
+    // Don't trigger if user is just mentioning scribble in conversation
+    const isJustMentioning = (
+      lowerMessage.includes('not scribble') ||
+      lowerMessage.includes('not a scribble') ||
+      lowerMessage.includes('not the scribble') ||
+      lowerMessage.includes('about scribble') ||
+      lowerMessage.includes('what is scribble') ||
+      lowerMessage.includes('explain scribble') ||
+      lowerMessage.includes('something more') ||
+      lowerMessage.includes('something else') ||
+      lowerMessage.includes('different') ||
+      lowerMessage.includes('other')
+    );
+    
+    if (isGameRequest && !isJustMentioning) {
+      // Remove typing indicator
+      setMessages(prev => prev.filter(msg => msg.id !== 'typing'));
+      
+      // Show the modal
+      setShowScribbleModal(true);
+      
+      // Add a system message
+      const systemMessage: ChatMessage = {
+        id: `scribble-${Date.now()}-${Math.random()}`,
+        type: 'assistant',
+        content: '🎨 **Starting Scribble Game!** Welcome to the most fun drawing and guessing game ever!',
+        timestamp: new Date(),
+        gameType: 'scribble'
+      };
+      setMessages(prev => [...prev, systemMessage]);
+      return;
+    }
 
     try {
       // Get recent conversation history for context
@@ -1074,18 +1222,22 @@ const ChatBasedGameSystem: React.FC = () => {
         content: message
       });
 
+      console.log('Calling Groq API with messages:', recentMessages);
+      
       // Generate AI response using Groq
       const aiResponse = await groqAIService.generateResponse(recentMessages);
+      
+      console.log('Groq API response:', aiResponse);
 
       // Remove typing indicator
       setMessages(prev => prev.filter(msg => msg.id !== 'typing'));
 
-      const assistantMessage: ChatMessage = {
-        id: Date.now().toString(),
-        type: 'assistant',
-        content: aiResponse,
-        timestamp: new Date()
-      };
+             const assistantMessage: ChatMessage = {
+         id: `ai-response-${Date.now()}-${Math.random()}`,
+         type: 'assistant',
+         content: aiResponse,
+         timestamp: new Date()
+       };
 
       setMessages(prev => [...prev, assistantMessage]);
     } catch (error) {
@@ -1095,12 +1247,12 @@ const ChatBasedGameSystem: React.FC = () => {
       setMessages(prev => prev.filter(msg => msg.id !== 'typing'));
 
       // Fallback response
-      const fallbackMessage: ChatMessage = {
-        id: Date.now().toString(),
-        type: 'assistant',
-        content: "I'm having trouble connecting right now, but I'm still here to help! What would you like to do?",
-        timestamp: new Date()
-      };
+             const fallbackMessage: ChatMessage = {
+         id: `fallback-${Date.now()}-${Math.random()}`,
+         type: 'assistant',
+         content: "I'm having trouble connecting right now, but I'm still here to help! What would you like to do?",
+         timestamp: new Date()
+       };
 
       setMessages(prev => [...prev, fallbackMessage]);
     }
@@ -1118,8 +1270,22 @@ const ChatBasedGameSystem: React.FC = () => {
           <div className="mt-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
             <h4 className="font-semibold text-blue-800 mb-2">🧠 Brain Teaser</h4>
             <p className="text-blue-700 mb-3">{gameState.currentTeaser.question}</p>
-            <div className="text-sm text-blue-600">
+            <div className="text-sm text-blue-600 mb-3">
               <p>Score: {gameState.teaserScore || 0} | Streak: {gameState.teaserStreak || 0}</p>
+            </div>
+            <div className="flex flex-wrap gap-2 justify-center">
+              <button
+                onClick={() => handleQuickAction('reveal answer')}
+                className="px-3 py-1 bg-yellow-100 border border-yellow-300 text-yellow-700 rounded text-xs hover:bg-yellow-200 transition-colors"
+              >
+                🔍 Reveal Answer
+              </button>
+              <button
+                onClick={() => handleQuickAction('quit game')}
+                className="px-3 py-1 bg-red-100 border border-red-300 text-red-700 rounded text-xs hover:bg-red-200 transition-colors"
+              >
+                🚪 Quit Game
+              </button>
             </div>
           </div>
         );
@@ -1605,10 +1771,53 @@ const ChatBasedGameSystem: React.FC = () => {
     }
   };
 
-  // Quick action handler for Mystery Manor
+  // Quick action handler for all games
   const handleQuickAction = (action: string) => {
-    // Process the action directly instead of setting input value
-    handleMysteryManorAction(action);
+    const currentGame = currentGameRef.current;
+    
+         if (action === 'quit game') {
+       // Handle quit for all games
+       const quitMessage: ChatMessage = {
+         id: `quit-${Date.now()}-${Math.random()}`,
+         type: 'assistant',
+         content: `🏃‍♂️ **You've decided to quit the game.**\n\nThanks for playing! You can start a new game anytime by asking me to play again.`,
+         timestamp: new Date(),
+         gameType: currentGame as any,
+         isGameResponse: true
+       };
+       
+       setMessages(prev => [...prev, quitMessage]);
+       
+       // End the current game and reset brain teaser state
+       setGameState(prev => ({
+         ...prev,
+         currentGame: null,
+         currentTeaser: null,
+         isGeneratingNewTeaser: false
+       }));
+       return;
+     }
+    
+    if (action === 'reveal answer' && currentGame === 'brain-teaser') {
+      handleRevealAnswer();
+      return;
+    }
+    
+    // For other actions, route to appropriate game handler
+    switch (currentGame) {
+      case 'mystery-manor':
+        handleMysteryManorAction(action);
+        break;
+      case 'ai-story-battle':
+        handleAIStoryBattleAction(action);
+        break;
+      default:
+        // For other games, just process as a regular message
+        if (currentGame) {
+          handleGameAction(action);
+        }
+        break;
+    }
   };
 
   const exitGame = () => {
@@ -1627,17 +1836,18 @@ const ChatBasedGameSystem: React.FC = () => {
       numberToGuess: undefined,
       numberAttempts: 0,
       numberFeedback: '',
-      currentTeaser: undefined,
-      teaserScore: 0,
-      teaserStreak: 0
+             currentTeaser: undefined,
+       teaserScore: 0,
+       teaserStreak: 0,
+       isGeneratingNewTeaser: false
     }));
 
-    const exitMessage: ChatMessage = {
-      id: Date.now().toString(),
-      type: 'assistant',
-      content: "🎮 **Game ended!**\n\nThanks for playing! What would you like to do next? You can ask me to play another game or just chat with me!",
-      timestamp: new Date()
-    };
+         const exitMessage: ChatMessage = {
+       id: `exit-${Date.now()}-${Math.random()}`,
+       type: 'assistant',
+       content: "🎮 **Game ended!**\n\nThanks for playing! What would you like to do next? You can ask me to play another game or just chat with me!",
+       timestamp: new Date()
+     };
 
     setMessages(prev => [...prev, exitMessage]);
   };
@@ -1664,7 +1874,7 @@ const ChatBasedGameSystem: React.FC = () => {
         return gameState.numberToGuess && gameState.numberAttempts && 
                gameState.numberFeedback?.includes('Correct');
       case 'brain-teaser':
-        return false; // Brain teaser doesn't have a clear "game over" state
+        return false; // Brain teaser never ends automatically - only when user quits
       case 'mystery-manor':
         return gameState.manorState?.gameOver === true;
       case 'rock-paper-scissors':
@@ -1807,6 +2017,17 @@ const ChatBasedGameSystem: React.FC = () => {
           }
         </div>
       </div>
+
+      {/* Scribble Modal */}
+      <ScribbleModal 
+        isOpen={showScribbleModal}
+        onClose={() => setShowScribbleModal(false)}
+        onJoinRoom={(roomId) => {
+          console.log('Joining room:', roomId);
+          // You can add room joining logic here
+        }}
+        roomId={roomId}
+      />
     </div>
   );
 };
